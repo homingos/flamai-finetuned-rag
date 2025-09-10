@@ -1,0 +1,22 @@
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env
+
+# Local configuration and data
+config.json
+*.pdf
+*.gguf
+questions.txt
+
+# Vector store index and output
+faiss_index/
+results.json
+
+# IDE and OS specific
+.idea/
+.vscode/
+.DS_Store
