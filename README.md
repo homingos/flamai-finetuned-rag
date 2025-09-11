@@ -2,6 +2,7 @@
 
 This project provides a powerful, offline solution for asking questions about a PDF document and generating multiple, contextually-correct, and stylistically-diverse answers for each question. It is highly optimized for GPU acceleration on both NVIDIA (CUDA) and Apple Silicon (Metal) hardware, leveraging `llama-cpp-python` for fast, local inference.
 
+
 The output is a structured JSON file containing clean, conversational text ready for use in Text-to-Speech (TTS) applications, making it ideal for building talking agents or voice-based assistants.
 
 ## Features
@@ -69,6 +70,7 @@ First, install the core packages from `requirements.txt`.
 ```bash
 pip install --upgrade pip
 pip install -r requirements.txt
+pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
 ```
 
 Next, install `llama-cpp-python` with the correct hardware acceleration flags. **Choose only one** of the following commands based on your system.

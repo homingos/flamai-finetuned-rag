@@ -290,7 +290,8 @@ Answer:"""
                 input_data = {"question": question}
                 
                 # Check context size
-                retrieved_docs = self.retriever.get_relevant_documents(question)
+                retrieved_docs = self.retriever.invoke(question)
+
                 context_text = "\n".join([doc.page_content for doc in retrieved_docs])
                 estimated_tokens = len(context_text.split()) + len(question.split()) + 100
                 

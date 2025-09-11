@@ -4,4 +4,4 @@ langchain-huggingface
 pypdf
 faiss-cpu
 sentence-transformers
-llama-cpp-python[cuda]
+
