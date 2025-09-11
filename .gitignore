@@ -6,8 +6,7 @@ __pycache__/
 venv/
 .env
 
-# Local configuration and data
-config.json
+
 *.pdf
 *.gguf
 questions.txt
