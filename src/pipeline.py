@@ -1,7 +1,9 @@
 import os
 import json
+import yaml
 import re
 import unicodedata
+import csv
 from operator import itemgetter
 from typing import List, Dict, Tuple, Any
 from langchain_huggingface import HuggingFaceEmbeddings
@@ -62,12 +64,12 @@ Give the simplest, most straightforward answer possible. No fancy words. Under 3
 Answer:"""
     }
     
-    def __init__(self, config_path: str = "config.json"):
+    def __init__(self, config_path: str = "config.yaml"):
         """
         Initialize the RAG Question Answering system.
         
         Args:
-            config_path (str): Path to the configuration file
+            config_path (str): Path to the YAML configuration file
         """
         self.config = self.load_config(config_path)
         self.vectorstore = None
@@ -75,35 +77,58 @@ Answer:"""
         self.llm_instances = {}
         self.chains = {}
         self.is_initialized = False
+        self.current_request = None
     
     def load_config(self, config_path: str) -> Dict[str, Any]:
-        """Load the configuration file."""
+        """Load the YAML configuration file."""
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"Configuration file not found at '{config_path}'")
         
         with open(config_path, 'r') as f:
-            config = json.load(f)
+            config = yaml.safe_load(f)
         
         print("--- Configuration Loaded ---")
-        print(f"PDF Path: {config['pdf_path']}")
-        print(f"Questions Path: {config['questions_path']}")
         print(f"Model Path: {config['model_path']}")
         print(f"Output Path: {config['output_path']}")
         print("--------------------------\n")
         
         return config
     
+    def load_request(self, request_path: str) -> Dict[str, Any]:
+        """Load the request file with PDF and questions paths."""
+        if not os.path.exists(request_path):
+            raise FileNotFoundError(f"Request file not found at '{request_path}'")
+        
+        with open(request_path, 'r') as f:
+            request = json.load(f)
+        
+        print("--- Request Loaded ---")
+        print(f"PDF Path: {request['pdf_path']}")
+        print(f"Questions Path: {request['questions_path']}")
+        print("---------------------\n")
+        
+        self.current_request = request
+        return request
+
     def read_questions_from_file(self, filepath: str) -> List[str]:
-        """Read questions from a file, where questions are separated by blank lines."""
+        """
+        Read questions from a CSV file.
+        The CSV file should have a header row, and one of the columns should be named 'question'.
+        Returns a list of questions (strings).
+        """
         if not os.path.exists(filepath):
             raise FileNotFoundError(f"Questions file not found at '{filepath}'")
         
-        with open(filepath, 'r') as f:
-            content = f.read()
-        
-        questions = [q.strip() for q in re.split(r'\n\s*\n', content) if q.strip()]
+        questions = []
+        with open(filepath, 'r', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            if 'question' not in reader.fieldnames:
+                raise ValueError(f"CSV file '{filepath}' must have a 'question' column.")
+            for row in reader:
+                q = row['question'].strip()
+                if q:
+                    questions.append(q)
         print(f"Found {len(questions)} questions in '{filepath}'.\n")
-        
         return questions
     
     def clean_for_tts(self, text: str) -> str:
@@ -172,9 +197,12 @@ Answer:"""
             n_threads=4
         )
     
-    def setup_vectorstore(self):
+    def setup_vectorstore(self, pdf_path: str = None):
         """Set up the vector store and retriever."""
-        pdf_path = self.config["pdf_path"]
+        if pdf_path is None:
+            if self.current_request is None:
+                raise ValueError("No request loaded. Call load_request() first or provide pdf_path.")
+            pdf_path = self.current_request["pdf_path"]
         
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"PDF file not found at '{pdf_path}'")
@@ -237,17 +265,27 @@ Answer:"""
                 StrOutputParser()
             )
     
-    def initialize_system(self):
-        """Initialize the complete RAG system."""
+    def initialize_model_system(self):
+        """Initialize only the model components (LLM instances and chains)."""
         if self.is_initialized:
-            print("System already initialized.")
+            print("Model system already initialized.")
             return
         
-        self.setup_vectorstore()
         self.setup_llm_instances()
-        self.setup_chains()
         self.is_initialized = True
-        print("✓ RAG system fully initialized!")
+        print("✓ Model system initialized!")
+    
+    def initialize_request_system(self, request_path: str = None):
+        """Initialize the request-specific components (vectorstore and chains)."""
+        if request_path:
+            self.load_request(request_path)
+        
+        if self.current_request is None:
+            raise ValueError("No request loaded. Call load_request() first.")
+        
+        self.setup_vectorstore()
+        self.setup_chains()
+        print("✓ Request system initialized!")
     
     def validate_answer(self, answer: str) -> str:
         """Validate and adjust answer quality for appropriate word count."""
@@ -317,12 +355,20 @@ Answer:"""
         
         return answers
     
-    def process_questions_from_file(self) -> List[Dict[str, Any]]:
-        """Process all questions from the configured questions file."""
+    def process_questions_from_file(self, questions_path: str = None) -> List[Dict[str, Any]]:
+        """Process all questions from the specified questions file."""
         if not self.is_initialized:
-            self.initialize_system()
+            raise RuntimeError("Model system not initialized. Call initialize_model_system() first.")
         
-        questions = self.read_questions_from_file(self.config["questions_path"])
+        if self.vectorstore is None or self.chains == {}:
+            raise RuntimeError("Request system not initialized. Call initialize_request_system() first.")
+        
+        if questions_path is None:
+            if self.current_request is None:
+                raise ValueError("No request loaded. Call load_request() first or provide questions_path.")
+            questions_path = self.current_request["questions_path"]
+        
+        questions = self.read_questions_from_file(questions_path)
         all_results = []
         
         print("\n--- Starting Answer Generation with 4 Specialized Models ---\n")
@@ -353,15 +399,17 @@ Answer:"""
         print(f"✓ Generated {len(results)} questions × 4 styles = {len(results) * 4} total answers")
         print(f"{'='*70}")
     
-    def run_complete_pipeline(self):
+    def run_complete_pipeline(self, request_path: str = None):
         """Run the complete question answering pipeline."""
         try:
-            self.initialize_system()
+            if not self.is_initialized:
+                self.initialize_model_system()
+            
+            self.initialize_request_system(request_path)
             results = self.process_questions_from_file()
-            self.save_results(results)
+            # self.save_results(results)
             return results
         except Exception as e:
             print(f"Error in pipeline: {e}")
             raise
-
 

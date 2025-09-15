@@ -1,0 +1,27 @@
+model_path: ./data/mistral-7b-instruct-v0.2.Q4_K_M.gguf
+output_path: ./results.json
+
+retrieval_params:
+  chunk_size: 1000
+  chunk_overlap: 50
+
+generation_params:
+  temperature: 0.5
+  max_tokens: 60
+  n_ctx: 8192
+  n_gpu_layers: 32
+  n_batch: 256
+  use_mlock: true
+  use_mmap: true
+  n_threads: 4
+
+model_settings:
+  total_models: 4
+  memory_optimization: true
+  parallel_processing: false
+
+tts_optimization:
+  max_words_per_answer: 40
+  target_length: "30-35 words"
+  remove_hedging: true
+  clean_for_speech: true
